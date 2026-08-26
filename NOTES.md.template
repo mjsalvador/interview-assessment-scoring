@@ -1,0 +1,18 @@
+# Notes
+
+## How the service works
+<!-- Describe the end-to-end flow in your own words: what happens from HTTP request to stored result -->
+
+## Scoring function
+<!-- How did you approach implementing calculate_score? Any edge cases that gave you pause? -->
+
+## Class results feature
+<!-- What did you build? Why did you structure it the way you did?
+     If you chose to extend an existing endpoint vs. create a new one, explain that choice. -->
+
+## Tradeoffs and what I'd do next
+<!-- What tradeoffs did you make? What would you tackle with more time? -->
+
+## Working with AI
+<!-- How did you use AI tools? What did you prompt, what came back, what did you change and why?
+     Think of this as a reflection on the collaboration, not a log. -->
