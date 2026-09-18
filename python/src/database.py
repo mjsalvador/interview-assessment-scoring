@@ -7,15 +7,19 @@ from uuid import uuid4
 from src.models import (
     AssessmentDetailResponse,
     AssessmentList,
+    AssessmentResultsSummary,
     AssessmentSummary,
     AssessmentWithSections,
     ClassList,
     ClassResponse,
+    ClassResultsResponse,
     ClassSummary,
     QuestionAnswer,
     ScoringSection,
+    SectionPerformance,
     SectionScoreResponse,
     SectionSummary,
+    StudentResults,
     StudentSummary,
     SubmissionResponse,
     SubmissionResponseList,
@@ -201,4 +205,134 @@ def get_assessment_detail(
             SectionSummary(id=s["id"], name=s["name"], weight=s["weight"])
             for s in section_rows
         ],
+    )
+
+
+def get_class_results(
+    class_id: str,
+    assessment_id: str | None,
+    db_path: str | Path = _DB_PATH,
+) -> ClassResultsResponse | None:
+    with closing(_connect(db_path)) as conn:
+        row = conn.execute(
+            "SELECT id, name, teacher_name FROM classes WHERE id = ?", (class_id,)
+        ).fetchone()
+        if row is None:
+            return None
+
+        rows = conn.execute(
+            """
+            SELECT s.id AS student_id, s.name AS student_name,
+                   sub.id AS submission_id, sub.assessment_id, a.name AS assessment_name,
+                   sub.section_scores, sub.overall_percentage, sub.passed
+            FROM class_students cs
+            JOIN students s ON s.id = cs.student_id
+            LEFT JOIN submissions sub
+                   ON sub.student_id = s.id
+                  AND (? IS NULL OR sub.assessment_id = ?)
+            LEFT JOIN assessments a ON a.id = sub.assessment_id
+            WHERE cs.class_id = ?
+            ORDER BY s.id, sub.assessment_id
+            """,
+            (assessment_id, assessment_id, class_id),
+        ).fetchall()
+
+    students: dict[str, dict] = {}
+    assessments: dict[str, dict] = {}
+
+    for r in rows:
+        student_id = r["student_id"]
+        if student_id not in students:
+            students[student_id] = {
+                "id": student_id,
+                "name": r["student_name"],
+                "submissions": [],
+            }
+
+        if r["submission_id"] is None:
+            continue
+
+        parsed_sections = json.loads(r["section_scores"])
+        students[student_id]["submissions"].append(
+            SubmissionResponse(
+                submission_id=r["submission_id"],
+                student_id=student_id,
+                assessment_id=r["assessment_id"],
+                section_scores=[
+                    SectionScoreResponse.model_validate(sec) for sec in parsed_sections
+                ],
+                overall_percentage=r["overall_percentage"],
+                passed=bool(r["passed"]),
+            )
+        )
+
+        a_id = r["assessment_id"]
+        if a_id not in assessments:
+            assessments[a_id] = {
+                "id": a_id,
+                "name": r["assessment_name"],
+                "submitted_student_ids": [],
+                "passed_student_ids": [],
+                "sections": {},
+            }
+        assessments[a_id]["submitted_student_ids"].append(student_id)
+        if bool(r["passed"]):
+            assessments[a_id]["passed_student_ids"].append(student_id)
+
+        for sec in parsed_sections:
+            sec_acc = assessments[a_id]["sections"].setdefault(
+                sec["id"],
+                {"name": sec["name"], "percentages": [], "passing_ids": [], "failing_ids": []},
+            )
+            sec_acc["percentages"].append(sec["percentage"])
+            if sec["passed"]:
+                sec_acc["passing_ids"].append(student_id)
+            else:
+                sec_acc["failing_ids"].append(student_id)
+
+    roster_size = len(students)
+
+    assessment_summaries = []
+    for a_id in sorted(assessments):
+        acc = assessments[a_id]
+        students_submitted = len(acc["submitted_student_ids"])
+        submitted_ids = set(acc["submitted_student_ids"])
+        not_submitted_ids = [sid for sid in students if sid not in submitted_ids]
+        section_performances = [
+            SectionPerformance(
+                id=sec_id,
+                name=acc["sections"][sec_id]["name"],
+                average_percentage=round(
+                    sum(acc["sections"][sec_id]["percentages"])
+                    / len(acc["sections"][sec_id]["percentages"]),
+                    4,
+                ),
+                submitted_count=len(acc["sections"][sec_id]["percentages"]),
+                passed_count=len(acc["sections"][sec_id]["passing_ids"]),
+                passing_student_ids=acc["sections"][sec_id]["passing_ids"],
+                failing_student_ids=acc["sections"][sec_id]["failing_ids"],
+            )
+            for sec_id in sorted(acc["sections"])
+        ]
+        assessment_summaries.append(
+            AssessmentResultsSummary(
+                id=a_id,
+                name=acc["name"],
+                students_submitted=students_submitted,
+                students_not_submitted=roster_size - students_submitted,
+                students_not_submitted_ids=not_submitted_ids,
+                students_passed=len(acc["passed_student_ids"]),
+                sections=section_performances,
+            )
+        )
+
+    return ClassResultsResponse(
+        id=row["id"],
+        name=row["name"],
+        teacher_name=row["teacher_name"],
+        students=[
+            StudentResults(id=s["id"], name=s["name"], submissions=s["submissions"])
+            for s in students.values()
+        ],
+        assessment_summaries=assessment_summaries,
     )

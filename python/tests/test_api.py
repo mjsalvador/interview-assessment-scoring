@@ -58,6 +58,18 @@ def test_get_class_returns_404_for_unknown_class(test_client):
     assert response.status_code == 404
 
 
+def test_get_class_results_returns_404_for_unknown_class(test_client):
+    response = test_client.get("/classes/does-not-exist/results")
+    assert response.status_code == 404
+
+
+def test_get_class_results_returns_404_for_unknown_assessment_id(test_client):
+    response = test_client.get(
+        "/classes/class-001/results?assessment_id=does-not-exist"
+    )
+    assert response.status_code == 404
+
+
 def test_get_assessments_returns_list(test_client):
     response = test_client.get("/assessments")
     assert response.status_code == 200
