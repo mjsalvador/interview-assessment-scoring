@@ -39,8 +39,44 @@ def calculate_score(
         - An empty submission is valid and scores 0 in all sections
         - Section weights are guaranteed to sum to 1.0
 
-    TODO: Implement this function.
-    The tests in tests/test_scoring.py define the expected behavior.
-    Run: docker compose run test
     """
-    raise NotImplementedError
+    section_scores = []
+    overall = 0.0
+
+    for section in sections:
+        questions = section["questions"]
+        if not questions:
+            raise ValueError(f"Section {section['id']} has no questions")
+
+        points_possible = len(questions)
+        points_earned = 0
+
+        for question_id, correct_answer in questions.items():
+            submitted = submitted_answers.get(question_id)
+            if submitted is None:
+                continue
+            if submitted.strip().casefold() == correct_answer.strip().casefold():
+                points_earned += 1
+
+        percentage = points_earned / points_possible
+        passed = percentage >= MASTERY_THRESHOLD
+        overall += percentage * section["weight"]
+
+        section_scores.append({
+            "id": section["id"],
+            "name": section["name"],
+            "points_earned": points_earned,
+            "points_possible": points_possible,
+            "percentage": round(percentage, 4),
+            "passed": passed,
+        })
+
+    all_sections_passed = all(s["passed"] for s in section_scores)
+    overall_passed = round(overall, 9) >= MASTERY_THRESHOLD
+    passed = overall_passed and all_sections_passed
+
+    return {
+        "section_scores": section_scores,
+        "overall_percentage": round(overall, 4),
+        "passed": passed,
+    }

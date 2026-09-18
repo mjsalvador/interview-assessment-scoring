@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_submit_returns_422_on_missing_student_id(test_client):
     response = test_client.post(
         "/assessments/assess-001/submit",
@@ -14,6 +17,7 @@ def test_submit_returns_404_on_unknown_assessment(test_client):
     assert response.status_code == 404
 
 
+@pytest.mark.skip(reason="described submit's 500 response before calculate_score was implemented")
 def test_submit_returns_500_before_scoring_implemented(test_client):
     response = test_client.post(
         "/assessments/assess-001/submit",
