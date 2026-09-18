@@ -7,6 +7,7 @@ from src.database import (
     get_assessment_detail,
     get_assessment_with_sections,
     get_assessments,
+    get_class_results,
     get_class_with_students,
     get_classes,
     get_submissions_for_student,
@@ -17,6 +18,7 @@ from src.models import (
     AssessmentDetailResponse,
     AssessmentSummary,
     ClassResponse,
+    ClassResultsResponse,
     ClassSummary,
     SectionScoreResponse,
     SubmissionResponse,
@@ -89,6 +91,20 @@ def list_classes() -> list[ClassSummary]:
 @app.get("/classes/{class_id}")
 def get_class(class_id: str) -> ClassResponse:
     result = get_class_with_students(class_id, _DB_PATH)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    return result
+
+
+@app.get("/classes/{class_id}/results")
+def get_class_assessment_results(
+    class_id: str, assessment_id: str | None = None
+) -> ClassResultsResponse:
+    if assessment_id is not None:
+        if get_assessment_detail(assessment_id, _DB_PATH) is None:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+
+    result = get_class_results(class_id, assessment_id, _DB_PATH)
     if result is None:
         raise HTTPException(status_code=404, detail="Class not found")
     return result
